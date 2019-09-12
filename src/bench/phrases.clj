@@ -13,8 +13,16 @@
                                               attr-name))) header)]
       (doall (map #(apply hash-map (interleave kvs %)) lines)))))
 
+(defn bench-one-cpu [dictionary-file articles-file]
+  (let [annotator-fn (phrases/annotator (readers/read-csv dictionary-file))
+        articles (read-news-articles articles-file)]
+    (prn "Articles: " (count articles))
+    (time
+      (doseq [article articles]
+        (try
+          (annotator-fn (:content article))
+          (catch Exception e (prn "Failed on" article)))))))
+
 (defn -main [& _]
-  (let [annotator-fn (phrases/annotator (readers/read-csv "resources/top-10.csv"))
-        articles (read-news-articles "resources/articles1.csv")]
-    (time (doseq [article (take 10000 articles)]
-            (annotator-fn (:content article))))))
+  (let [dictionary-file "resources/top-10.csv"
+        articles "resources/articles1.csv"]))

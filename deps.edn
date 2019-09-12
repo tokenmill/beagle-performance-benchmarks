@@ -1,6 +1,7 @@
-{:deps    {org.clojure/clojure {:mvn/version "1.10.1"}
-           lt.tokenmill/beagle {:git/url "https://github.com/tokenmill/beagle.git"
-                                :sha     "af4c6b7bb01a4adcc05a75fcc10b979278f57797"}}
+{:deps    {org.clojure/clojure    {:mvn/version "1.10.1"}
+           org.clojure/core.async {:mvn/version "0.4.500"}
+           lt.tokenmill/beagle    {:git/url "https://github.com/tokenmill/beagle.git"
+                                   :sha     "af4c6b7bb01a4adcc05a75fcc10b979278f57797"}}
  :paths   ["src" "resources"]
  :aliases {:dev
            {:extra-deps {org.jsoup/jsoup        {:mvn/version "1.11.3"}

@@ -4,6 +4,7 @@
             [clojure.tools.logging :as log]
             [clojure.data.csv :as csv]
             [clojure.core.async :refer [chan pipeline-blocking to-chan <!! close!]]
+            [oz.core :as oz]
             [beagle.readers :as readers]
             [beagle.phrases :as phrases]))
 
@@ -64,7 +65,7 @@
     rez))
 
 (defn bench-one-cpu* [dictionary-file articles-file]
-  (let [dictionary (readers/read-csv dictionary-file)
+  (let [dictionary (take 5000 (readers/read-csv dictionary-file))
         articles (take 1000 (read-news-articles articles-file))]
     (let [step (min 1000 (count dictionary))]
       (loop [cnt step
@@ -79,10 +80,30 @@
                                  :articles-count  (count articles)
                                  :failed          (count failed)
                                  :total-time      (- (System/currentTimeMillis) start)
+                                 :min             (apply min coll)
+                                 :max             (apply max coll)
                                  :average         (float (/ (reduce + coll) (count coll)))})))
           result)))))
 
 (defn -main [& _]
-  (let [dictionary-file "resources/top-10.csv"
-        articles "resources/articles1.csv"]
-    (bench-one-cpu* dictionary-file articles)))
+  (let [dictionary-file "resources/top-10000.csv"
+        articles "resources/articles1.csv"
+        vals (bench.phrases/bench-one-cpu* dictionary-file articles)]
+    (oz/view!
+      [:div
+       [:h1 "Beagle performance"]
+       [:p "Average per doc and total time per doc"]
+       [:div {:style {:display "flex" :flex-direction "row"}}
+        [:vega-lite {:data {:values vals}
+                     :encoding {:x {:field "dictionary-size"}
+                                :y {:field "average"}
+                                :color {:field "articles-count" :type "nominal"}}
+                     :mark "line"}]
+        [:vega-lite {:data {:values vals}
+                     :layer []
+                     :encoding {:x {:field "dictionary-size"}
+                                :y {:field "total-time"}
+                                :color {:field "articles-count" :type "nominal"}}
+                     :mark "line"}]]
+       [:h2 "Summary"]
+       [:p "This sums up the performance benchmarks."]])))

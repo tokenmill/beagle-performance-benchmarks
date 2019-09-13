@@ -85,25 +85,27 @@
                                  :average         (float (/ (reduce + coll) (count coll)))})))
           result)))))
 
+(defn preview-vals [vals]
+  (oz/view!
+    [:div
+     [:h1 "Beagle performance"]
+     [:p "Average per doc and total time per doc"]
+     [:div {:style {:display "flex" :flex-direction "row"}}
+      [:vega-lite {:data {:values vals}
+                   :encoding {:x {:field "dictionary-size"}
+                              :y {:field "average"}
+                              :color {:field "articles-count" :type "nominal"}}
+                   :mark "line"}]
+      [:vega-lite {:data {:values vals}
+                   :encoding {:x {:field "dictionary-size"}
+                              :y {:field "total-time"}
+                              :color {:field "articles-count" :type "nominal"}}
+                   :mark "line"}]]
+     [:h2 "Summary"]
+     [:p "This sums up the performance benchmarks."]]))
+
 (defn -main [& _]
   (let [dictionary-file "resources/top-10000.csv"
         articles "resources/articles1.csv"
         vals (bench.phrases/bench-one-cpu* dictionary-file articles)]
-    (oz/view!
-      [:div
-       [:h1 "Beagle performance"]
-       [:p "Average per doc and total time per doc"]
-       [:div {:style {:display "flex" :flex-direction "row"}}
-        [:vega-lite {:data {:values vals}
-                     :encoding {:x {:field "dictionary-size"}
-                                :y {:field "average"}
-                                :color {:field "articles-count" :type "nominal"}}
-                     :mark "line"}]
-        [:vega-lite {:data {:values vals}
-                     :layer []
-                     :encoding {:x {:field "dictionary-size"}
-                                :y {:field "total-time"}
-                                :color {:field "articles-count" :type "nominal"}}
-                     :mark "line"}]]
-       [:h2 "Summary"]
-       [:p "This sums up the performance benchmarks."]])))
+    (preview-vals vals)))

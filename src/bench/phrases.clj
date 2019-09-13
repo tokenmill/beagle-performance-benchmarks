@@ -79,7 +79,7 @@
                    (conj result {:dictionary-size (count (take cnt dictionary))
                                  :articles-count  (count articles)
                                  :failed          (count failed)
-                                 :total-time      (- (System/nanoTime) start)
+                                 :total-time      (float (/ (- (System/nanoTime) start) 1000000))
                                  :min             (float (/ (apply min succeeded) 1000000))
                                  :max             (float (/ (apply max succeeded) 1000000))
                                  :average         (float (/ (reduce + succeeded) (count succeeded) 1000000))})))

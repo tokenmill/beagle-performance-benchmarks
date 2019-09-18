@@ -2,7 +2,7 @@
            org.clojure/core.async {:mvn/version "0.4.500"}
            metasoarous/oz         {:mvn/version "1.6.0-alpha5"}
            lt.tokenmill/beagle    {:git/url "https://github.com/tokenmill/beagle.git"
-                                   :sha     "f6b0f00c8176663d3e785f87f79d6b9bdb464cfa"}}
+                                   :sha     "9346b72aad21276bc534214cb44f148f4378cdc2"}}
  :paths   ["src" "resources"]
  :aliases {:dev
            {:extra-deps {org.jsoup/jsoup        {:mvn/version "1.11.3"}

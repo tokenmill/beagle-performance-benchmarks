@@ -17,62 +17,58 @@
       (doall (map #(apply hash-map (interleave kvs %)) lines)))))
 
 (defn annotate [annotator-fn article]
-  (try
-    (annotator-fn (:content article))
-    (catch NullPointerException e
-      [])
-    (catch Exception e
-      (log/warnf "Failed on %s with %s" article e)
-      (.printStackTrace e)
-      [])))
+  (let [start (System/nanoTime)]
+    (try
+      (let [annotations (annotator-fn (:content article))]
+        {:annotations annotations
+         :duration    (- (System/nanoTime) start)})
+      (catch NullPointerException _
+        {:annotations []
+         :duration    -1})
+      (catch Exception e
+        (.printStackTrace e)
+        {:annotations []
+         :duration    -1}))))
+
+(defn bench-concurrent*
+  ([dictionary articles] (bench-concurrent* dictionary articles 4))
+  ([dictionary articles parallelism]
+   (let [annotator-fn (phrases/annotator dictionary)
+         out (chan (or parallelism 16))
+         xf (map #(annotate annotator-fn %))
+         start (System/nanoTime)]
+     (pipeline-blocking
+       (or parallelism 16)
+       out
+       xf
+       (to-chan articles))
+     (let [output (doall (map (fn [_] (<!! out)) (range (count articles))))]
+       (close! out)
+       (log/infof "Annotated in %s ns" (- (System/nanoTime) start))
+       output))))
 
 (defn multithreaded [dictionary-file articles-file parallelism]
-  (let [annotator-fn (time (phrases/annotator (readers/read-csv dictionary-file)))
-        articles (take 1000 (read-news-articles articles-file))
-        out (chan (or parallelism 16))
-        xf (map #(annotate annotator-fn %))]
-    (pipeline-blocking
-      (or parallelism 16)
-      out
-      xf
-      (to-chan articles))
-    (let [output (doall (mapcat (fn [_] (<!! out)) (range (count articles))))]
-      (close! out)
-      output)))
+  (let [dictionary (readers/read-csv dictionary-file)
+        articles (read-news-articles articles-file)]
+    (log/infof "Dictionary size: %s; articles: %s" (count dictionary) (count articles))
+    (bench-concurrent* dictionary articles parallelism)))
 
-(defn bench-one-cpu [dictionary articles]
-  (let [start (System/nanoTime)
-        annotator-fn (phrases/annotator dictionary)
-        setup-time (- (System/nanoTime) start)
+(defn bench-one-thread [dictionary articles]
+  (let [annotator-fn (phrases/annotator dictionary)
         start (System/nanoTime)
-        rez (doall
-              (map (fn [article]
-                     (let [start (System/nanoTime)]
-                       (try
-                         (let [annotations (annotator-fn (:content article))]
-                           {:annotations annotations
-                            :setup-time  setup-time
-                            :duration    (- (System/nanoTime) start)})
-                         (catch NullPointerException _
-                           {:annotations []
-                            :duration    -1})
-                         (catch Exception e
-                           (.printStackTrace e)
-                           {:annotations []
-                            :duration    -1}))))
-                   articles))
+        rez (doall (map #(annotate annotator-fn %) articles))
         _ (log/infof "Annotated in %s ns" (- (System/nanoTime) start))]
     rez))
 
 (defn bench-one-cpu* [dictionary-file articles-file]
-  (let [dictionary (take 50000 (readers/read-csv dictionary-file))
-        articles (take 5000 (read-news-articles articles-file))]
-    (let [step (min 1000 (count dictionary))]
+  (let [dictionary (readers/read-csv dictionary-file)
+        articles (take 10000 (read-news-articles articles-file))]
+    (let [step (min 5000 (count dictionary))]
       (loop [cnt step
              result []]
         (if (<= cnt (count dictionary))
           (let [start (System/nanoTime)
-                rez (bench-one-cpu (take cnt dictionary) articles)
+                rez (bench-concurrent* (take cnt dictionary) articles 16)
                 succeeded (filter pos-int? (map :duration rez))
                 failed (filter neg-int? (map :duration rez))]
             (recur (+ cnt step)

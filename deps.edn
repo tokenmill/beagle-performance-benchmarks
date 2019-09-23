@@ -1,7 +1,8 @@
 {:deps    {org.clojure/clojure    {:mvn/version "1.10.1"}
            org.clojure/core.async {:mvn/version "0.4.500"}
            metasoarous/oz         {:mvn/version "1.5.5"}
-           lt.tokenmill/beagle    {:mvn/version "0.1.7"}}
+           lt.tokenmill/beagle    {:mvn/version "0.1.7"}
+           org.clojure/tools.cli  {:mvn/version "0.4.2"}}
  :paths   ["src" "resources"]
  :aliases {:dev
            {:extra-deps {org.jsoup/jsoup        {:mvn/version "1.11.3"}

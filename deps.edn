@@ -1,0 +1,21 @@
+{:deps    {org.clojure/clojure    {:mvn/version "1.10.1"}
+           org.clojure/core.async {:mvn/version "0.4.500"}
+           metasoarous/oz         {:mvn/version "1.5.5"}
+           lt.tokenmill/beagle    {:mvn/version "0.1.7"}
+           org.clojure/tools.cli  {:mvn/version "0.4.2"}}
+ :paths   ["src" "resources"]
+ :aliases {:dev
+           {:extra-deps {org.jsoup/jsoup        {:mvn/version "1.11.3"}
+                         org.clojure/test.check {:mvn/version "0.9.0"}
+                         criterium              {:mvn/version "0.4.5"}}}
+           :clj-kondo
+           {:main-opts  ["-m" "clj-kondo.main --lint src test"]
+            :extra-deps {clj-kondo {:mvn/version "2019.07.31-alpha"}}
+            :jvm-opts   ["-Dclojure.main.report=stderr"]}
+           :test
+           {:extra-paths ["test"]
+            :extra-deps  {com.cognitect/test-runner {:git/url "https://github.com/cognitect-labs/test-runner.git"
+                                                     :sha     "028a6d41ac9ac5d5c405dfc38e4da6b4cc1255d5"}
+                          org.jsoup/jsoup           {:mvn/version "1.11.3"}
+                          org.clojure/test.check    {:mvn/version "0.9.0"}}
+            :main-opts   ["-m" "cognitect.test-runner"]}}}

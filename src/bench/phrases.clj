@@ -81,7 +81,8 @@
                                  :average         (float (/ (reduce + succeeded) (count succeeded) 1000000))})))
           result)))))
 
-(defn bench [{:keys [warm-up dictionary texts step parallel key slop case-sensitive stem ascii-fold stemmer] :as opts}]
+(defn bench [{:keys [warm-up dictionary texts output step parallel key
+                     slop case-sensitive stem ascii-fold stemmer] :as opts}]
   (log/infof "Started benchmark with opts: '%s'" opts)
   (let [bench-fn (if parallel bench-concurrent* bench-one-thread)
         benchmark {:meta {:opts    opts
@@ -99,11 +100,13 @@
                                                 :dictionary-file       dictionary
                                                 :articles-file         texts
                                                 :key                   key})}]
-    (spit (str "vals-" (System/currentTimeMillis) ".json") (json/write-value-as-string benchmark))))
+    (spit output (json/write-value-as-string benchmark))))
 
 (def cli-options
   [["-d" "--dictionary DICTIONARY" "Path to the dictionary file"
     :default "resources/top-10000.csv"]
+   ["-o" "--output OUTPUT" "Path to the output file"
+    :default (str "vals-" (System/currentTimeMillis) ".json")]
    [:short-opt "-t"
     :long-opt "--texts"
     :desc "Path to the CSV file with texts"
@@ -135,7 +138,6 @@
    [nil "--stemmer STEMMER" "which stemmer should be used"
     :parse-fn #(keyword %)
     :default :english]
-   ;; A boolean option defaulting to nil
    ["-h" "--help"]])
 
 (defn -main [& args]
@@ -145,12 +147,12 @@
       (println errors)
       (println summary)
       (System/exit 0))
-    (when-not (get-in options [:options :texts])
-      (log/error "Please specify texts file.")
-      (println summary)
-      (System/exit 0))
     (if (:help options)
       (do
+        (when-not (get-in options [:options :texts])
+          (log/error "Please specify texts file.")
+          (println summary)
+          (System/exit 0))
         (println summary)
         (System/exit 0))
       (do

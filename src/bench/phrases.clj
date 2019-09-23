@@ -104,11 +104,10 @@
 (def cli-options
   [["-d" "--dictionary DICTIONARY" "Path to the dictionary file"
     :default "resources/top-10000.csv"]
-   ["-t" "--texts" "Path to the CSV file with texts"
-    :default "resources/articles1.csv"
-    :required "TEXTS"
-    :parse-fn #(str %)
-    :strict true]
+   [:short-opt "-t"
+    :long-opt "--texts"
+    :desc "Path to the CSV file with texts"
+    :required "TEXTS_CSV_FILE"]
    ["-s" "--step STEP" "Step size for increase in dictionary"
     :parse-fn #(Integer/parseInt %)
     :default 5000]
@@ -140,9 +139,16 @@
    ["-h" "--help"]])
 
 (defn -main [& args]
-  (let [{:keys [options summary] :as opts}
-        (cli/parse-opts args cli-options)]
-    (clojure.pprint/pprint opts)
+  (let [{:keys [options summary errors]}
+        (cli/parse-opts args cli-options :strict true)]
+    (when (seq errors)
+      (println errors)
+      (println summary)
+      (System/exit 0))
+    (when-not (get-in options [:options :texts])
+      (log/error "Please specify texts file.")
+      (println summary)
+      (System/exit 0))
     (if (:help options)
       (do
         (println summary)

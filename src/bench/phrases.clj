@@ -50,8 +50,8 @@
        (log/infof "Annotated in %s ns" (- (System/nanoTime) start))
        output))))
 
-(defn bench-one-thread [dictionary articles key _]
-  (let [annotator-fn (phrases/highlighter dictionary)
+(defn bench-one-thread [dictionary articles key opts]
+  (let [annotator-fn (phrases/highlighter dictionary opts)
         start (System/nanoTime)
         rez (doall (map #(annotate annotator-fn % key) articles))
         _ (log/infof "Annotated in %s ns" (- (System/nanoTime) start))]

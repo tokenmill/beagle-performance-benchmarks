@@ -61,7 +61,7 @@
       output))
   (refresh! es-host index-name))
 
-(defn annotator [dictionary opts]
+(defn highlighter [dictionary opts]
   (let [es-host (:es-host opts "http://localhost:9200")
         index-name (str "percolator-" (System/currentTimeMillis))]
     (store-dictionary! es-host index-name dictionary)

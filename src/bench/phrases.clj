@@ -7,7 +7,8 @@
             [clojure.core.async :refer [chan pipeline to-chan <!! close!]]
             [jsonista.core :as json]
             [beagle.readers :as readers]
-            [beagle.phrases :as phrases]))
+            [beagle.phrases :as phrases]
+            [bench.es :as es]))
 
 (defn read-news-articles [source]
   (with-open [reader (io/reader source)]
@@ -32,11 +33,12 @@
          :duration    -1}))))
 
 (defn bench-concurrent*
-  ([dictionary articles key]
-   (bench-concurrent* dictionary articles key {:concurrency(* 2 (.availableProcessors (Runtime/getRuntime)))}))
-  ([dictionary articles key opts]
+  ([highlighter-fn dictionary articles key]
+   (bench-concurrent* highlighter-fn dictionary articles key
+                      {:concurrency (* 2 (.availableProcessors (Runtime/getRuntime)))}))
+  ([highlighter-fn dictionary articles key opts]
    (let [concurrency (:concurrency opts)
-         annotator-fn (phrases/highlighter dictionary)
+         annotator-fn (highlighter-fn dictionary opts)
          out (chan (or concurrency 16))
          xf (map #(annotate annotator-fn % key))
          start (System/nanoTime)]
@@ -50,26 +52,27 @@
        (log/infof "Annotated in %s ns" (- (System/nanoTime) start))
        output))))
 
-(defn bench-one-thread [dictionary articles key opts]
-  (let [annotator-fn (phrases/highlighter dictionary opts)
+(defn bench-one-thread [highlighter-fn dictionary articles key opts]
+  (let [annotator-fn (highlighter-fn dictionary opts)
         start (System/nanoTime)
         rez (doall (map #(annotate annotator-fn % key) articles))
         _ (log/infof "Annotated in %s ns" (- (System/nanoTime) start))]
     rez))
 
-(defn bench* [{:keys [warm-up bench-fn dictionary-file dictionary-step dictionary-entry-opts articles-file key]
-               :as opts}]
+(defn bench* [{:keys [warm-up bench-fn highlighter-fn articles-file key
+                      dictionary-file dictionary-step dictionary-entry-opts]
+               :as   opts}]
   (let [dictionary (map #(merge % dictionary-entry-opts) (readers/read-csv dictionary-file))
         articles (read-news-articles articles-file)]
     (let [step (min (or dictionary-step 5000) (count dictionary))]
       (when warm-up
         (log/infof "Doing a warm-up run.")
-        (bench-fn dictionary articles key opts))
+        (bench-fn highlighter-fn dictionary articles key opts))
       (loop [cnt step
              result []]
         (if (<= cnt (count dictionary))
           (let [start (System/nanoTime)
-                rez (bench-fn (take cnt dictionary) articles key opts)
+                rez (bench-fn highlighter-fn (take cnt dictionary) articles key opts)
                 succeeded (filter pos-int? (map :duration rez))
                 failed (filter neg-int? (map :duration rez))]
             (recur (+ cnt step)
@@ -83,15 +86,22 @@
                                  :average         (float (/ (reduce + succeeded) (count succeeded) 1000000))})))
           result)))))
 
-(defn bench [{:keys [warm-up dictionary texts output step parallel concurrency
+(defn get-highlighter [kw]
+  (kw {:beagle     phrases/highlighter
+       :percolator es/highlighter}
+      beagle.phrases/highlighter))
+
+(defn bench [{:keys [implementation warm-up dictionary texts output step parallel concurrency
                      key slop case-sensitive stem ascii-fold stemmer] :as opts}]
   (log/infof "Started benchmark with opts: '%s'" opts)
   (let [bench-fn (if parallel bench-concurrent* bench-one-thread)
+        highlighter-fn (get-highlighter implementation)
         benchmark {:meta {:opts    opts
                           :system  (System/getProperties)
                           :runtime {:total-memory (.totalMemory (Runtime/getRuntime))
                                     :cpu          (.availableProcessors (Runtime/getRuntime))}}
                    :data (bench.phrases/bench* {:warm-up               warm-up
+                                                :highlighter-fn        highlighter-fn
                                                 :bench-fn              bench-fn
                                                 :dictionary-step       step
                                                 :dictionary-entry-opts {:slop            slop
@@ -103,6 +113,7 @@
                                                 :articles-file         texts
                                                 :key                   key
                                                 :concurrency           concurrency})}]
+    (log/infof "Results stored in: %s" output)
     (spit output (json/write-value-as-string benchmark))))
 
 (def cli-options
@@ -126,6 +137,9 @@
    ["-k" "--key KEY" "CSV header key to select"
     :parse-fn #(keyword %)
     :default :content]
+   ["-i" "--implementation IMPLEMENTATION" "Highlighter implementation"
+    :parse-fn #(keyword %)
+    :default :beagle]
    ["-w" "--warm-up WARM-UP" "Should the warm-up be run"
     :parse-fn #(Boolean/parseBoolean %)
     :default true]

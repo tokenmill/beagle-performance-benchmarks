@@ -1,0 +1,9 @@
+version: '2.2'
+services:
+
+
+  bench:
+    build:
+      context: ../
+      dockerfile: dockerfiles/Dockerfile.bench
+    command: ["clojure", "-m", "bench.phrases", "-t", "resources/a-10000.csv"]

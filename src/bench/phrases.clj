@@ -4,7 +4,7 @@
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
             [clojure.data.csv :as csv]
-            [clojure.core.async :refer [chan pipeline-blocking to-chan <!! close!]]
+            [clojure.core.async :refer [chan pipeline to-chan <!! close!]]
             [jsonista.core :as json]
             [beagle.readers :as readers]
             [beagle.phrases :as phrases]))
@@ -33,14 +33,15 @@
 
 (defn bench-concurrent*
   ([dictionary articles key]
-   (bench-concurrent* dictionary articles key (* 2 (.availableProcessors (Runtime/getRuntime)))))
-  ([dictionary articles key parallelism]
-   (let [annotator-fn (phrases/annotator dictionary)
-         out (chan (or parallelism 16))
+   (bench-concurrent* dictionary articles key {:concurrency(* 2 (.availableProcessors (Runtime/getRuntime)))}))
+  ([dictionary articles key opts]
+   (let [concurrency (:concurrency opts)
+         annotator-fn (phrases/highlighter dictionary)
+         out (chan (or concurrency 16))
          xf (map #(annotate annotator-fn % key))
          start (System/nanoTime)]
-     (pipeline-blocking
-       (or parallelism 16)
+     (pipeline
+       (or concurrency 16)
        out
        xf
        (to-chan articles))
@@ -49,25 +50,26 @@
        (log/infof "Annotated in %s ns" (- (System/nanoTime) start))
        output))))
 
-(defn bench-one-thread [dictionary articles key]
-  (let [annotator-fn (phrases/annotator dictionary)
+(defn bench-one-thread [dictionary articles key _]
+  (let [annotator-fn (phrases/highlighter dictionary)
         start (System/nanoTime)
         rez (doall (map #(annotate annotator-fn % key) articles))
         _ (log/infof "Annotated in %s ns" (- (System/nanoTime) start))]
     rez))
 
-(defn bench* [{:keys [warm-up bench-fn dictionary-file dictionary-step dictionary-entry-opts articles-file key]}]
+(defn bench* [{:keys [warm-up bench-fn dictionary-file dictionary-step dictionary-entry-opts articles-file key]
+               :as opts}]
   (let [dictionary (map #(merge % dictionary-entry-opts) (readers/read-csv dictionary-file))
         articles (read-news-articles articles-file)]
     (let [step (min (or dictionary-step 5000) (count dictionary))]
       (when warm-up
         (log/infof "Doing a warm-up run.")
-        (bench-fn dictionary articles key))
+        (bench-fn dictionary articles key opts))
       (loop [cnt step
              result []]
         (if (<= cnt (count dictionary))
           (let [start (System/nanoTime)
-                rez (bench-fn (take cnt dictionary) articles key)
+                rez (bench-fn (take cnt dictionary) articles key opts)
                 succeeded (filter pos-int? (map :duration rez))
                 failed (filter neg-int? (map :duration rez))]
             (recur (+ cnt step)
@@ -81,8 +83,8 @@
                                  :average         (float (/ (reduce + succeeded) (count succeeded) 1000000))})))
           result)))))
 
-(defn bench [{:keys [warm-up dictionary texts output step parallel key
-                     slop case-sensitive stem ascii-fold stemmer] :as opts}]
+(defn bench [{:keys [warm-up dictionary texts output step parallel concurrency
+                     key slop case-sensitive stem ascii-fold stemmer] :as opts}]
   (log/infof "Started benchmark with opts: '%s'" opts)
   (let [bench-fn (if parallel bench-concurrent* bench-one-thread)
         benchmark {:meta {:opts    opts
@@ -99,7 +101,8 @@
                                                                         :stemmer         stemmer}
                                                 :dictionary-file       dictionary
                                                 :articles-file         texts
-                                                :key                   key})}]
+                                                :key                   key
+                                                :concurrency           concurrency})}]
     (spit output (json/write-value-as-string benchmark))))
 
 (def cli-options
@@ -117,6 +120,9 @@
    ["-p" "--parallel PARALLEL" "Should the benchmark be run in parallel"
     :parse-fn #(Boolean/parseBoolean %)
     :default true]
+   ["-c" "--concurrency CONCURRENCY" "Number of concurrent executions."
+    :parse-fn #(Integer/parseInt %)
+    :default 16]
    ["-k" "--key KEY" "CSV header key to select"
     :parse-fn #(keyword %)
     :default :content]

@@ -8,7 +8,8 @@
             [jsonista.core :as json]
             [beagle.readers :as readers]
             [beagle.phrases :as phrases]
-            [bench.es :as es]))
+            [bench.percolator :as percolator]
+            [bench.cli-options :as cli-options]))
 
 (defn read-news-articles [source]
   (with-open [reader (io/reader source)]
@@ -59,11 +60,11 @@
         _ (log/infof "Annotated in %s ns" (- (System/nanoTime) start))]
     rez))
 
-(defn bench* [{:keys [warm-up bench-fn highlighter-fn articles-file key
+(defn bench* [{:keys [warm-up bench-fn highlighter-fn texts-file key
                       dictionary-file dictionary-step dictionary-entry-opts]
                :as   opts}]
   (let [dictionary (map #(merge % dictionary-entry-opts) (readers/read-csv dictionary-file))
-        articles (read-news-articles articles-file)]
+        articles (read-news-articles texts-file)]
     (let [step (min (or dictionary-step 5000) (count dictionary))]
       (when warm-up
         (log/infof "Doing a warm-up run.")
@@ -88,11 +89,10 @@
 
 (defn get-highlighter [kw]
   (kw {:beagle     phrases/highlighter
-       :percolator es/highlighter}
+       :percolator percolator/highlighter}
       beagle.phrases/highlighter))
 
-(defn bench [{:keys [implementation warm-up dictionary texts output step parallel concurrency
-                     key slop case-sensitive stem ascii-fold stemmer] :as opts}]
+(defn bench [{:keys [implementation output parallel slop case-sensitive stem ascii-fold stemmer] :as opts}]
   (log/infof "Started benchmark with opts: '%s'" opts)
   (let [bench-fn (if parallel bench-concurrent* bench-one-thread)
         highlighter-fn (get-highlighter implementation)
@@ -100,79 +100,31 @@
                           :system  (System/getProperties)
                           :runtime {:total-memory (.totalMemory (Runtime/getRuntime))
                                     :cpu          (.availableProcessors (Runtime/getRuntime))}}
-                   :data (bench.phrases/bench* {:warm-up               warm-up
-                                                :highlighter-fn        highlighter-fn
-                                                :bench-fn              bench-fn
-                                                :dictionary-step       step
-                                                :dictionary-entry-opts {:slop            slop
-                                                                        :case-sensitive? case-sensitive
-                                                                        :ascii-fold?     ascii-fold
-                                                                        :stem?           stem
-                                                                        :stemmer         stemmer}
-                                                :dictionary-file       dictionary
-                                                :articles-file         texts
-                                                :key                   key
-                                                :concurrency           concurrency})}]
+                   :data (bench.phrases/bench* (assoc opts
+                                                 :tokenizer             :whitespace
+                                                 :highlighter-fn        highlighter-fn
+                                                 :bench-fn              bench-fn
+                                                 :dictionary-entry-opts {:slop            slop
+                                                                         :case-sensitive? case-sensitive
+                                                                         :ascii-fold?     ascii-fold
+                                                                         :stem?           stem
+                                                                         :stemmer         stemmer}))}]
     (log/infof "Results stored in: %s" output)
     (spit output (json/write-value-as-string benchmark))))
 
-(def cli-options
-  [["-d" "--dictionary DICTIONARY" "Path to the dictionary file"
-    :default "resources/top-10000.csv"]
-   ["-o" "--output OUTPUT" "Path to the output file"
-    :default (str "vals-" (System/currentTimeMillis) ".json")]
-   [:short-opt "-t"
-    :long-opt "--texts"
-    :desc "Path to the CSV file with texts"
-    :required "TEXTS_CSV_FILE"]
-   ["-s" "--step STEP" "Step size for increase in dictionary"
-    :parse-fn #(Integer/parseInt %)
-    :default 5000]
-   ["-p" "--parallel PARALLEL" "Should the benchmark be run in parallel"
-    :parse-fn #(Boolean/parseBoolean %)
-    :default true]
-   ["-c" "--concurrency CONCURRENCY" "Number of concurrent executions."
-    :parse-fn #(Integer/parseInt %)
-    :default 16]
-   ["-k" "--key KEY" "CSV header key to select"
-    :parse-fn #(keyword %)
-    :default :content]
-   ["-i" "--implementation IMPLEMENTATION" "Highlighter implementation"
-    :parse-fn #(keyword %)
-    :default :beagle]
-   ["-w" "--warm-up WARM-UP" "Should the warm-up be run"
-    :parse-fn #(Boolean/parseBoolean %)
-    :default true]
-   [nil "--slop SLOP" "Phrase slop for dictionary entries"
-    :parse-fn #(Integer/parseInt %)
-    :default 0]
-   [nil "--case-sensitive CASE_SENSITIVE" "Should matching be case sensitive"
-    :parse-fn #(Boolean/parseBoolean %)
-    :default true]
-   [nil "--ascii-fold ASCII_FOLD" "Should matching be ascii folded"
-    :parse-fn #(Boolean/parseBoolean %)
-    :default false]
-   [nil "--stem STEM" "Should matching be stemmed"
-    :parse-fn #(Boolean/parseBoolean %)
-    :default false]
-   [nil "--stemmer STEMMER" "which stemmer should be used"
-    :parse-fn #(keyword %)
-    :default :english]
-   ["-h" "--help"]])
-
 (defn -main [& args]
   (let [{:keys [options summary errors]}
-        (cli/parse-opts args cli-options :strict true)]
+        (cli/parse-opts args cli-options/options :strict true)]
     (when (seq errors)
       (println errors)
       (println summary)
-      (System/exit 0))
+      (System/exit 1))
     (if (:help options)
       (do
         (when-not (get-in options [:options :texts])
           (log/error "Please specify texts file.")
           (println summary)
-          (System/exit 0))
+          (System/exit 1))
         (println summary)
         (System/exit 0))
       (do

@@ -1,4 +1,4 @@
-(ns bench.es
+(ns bench.percolator
   (:require [clojure.core.async :refer [chan pipeline-blocking <!! to-chan close!]]
             [clojure.tools.logging :as log]
             [jsonista.core :as json]
@@ -40,9 +40,9 @@
                               {:field    "query"
                                :document {:text text}}}
                   :highlight {:fields {:text {}}}})}
-     (fn [{:keys [status body] :as resp}]
-       (when-not (= 200 status)
-         (prn body))
+     (fn [{:keys [status body error] :as resp}]
+       (when (or (not= 200 status) error)
+         (throw (RuntimeException. (format "Error: %s" error))))
        (json/read-value body (json/object-mapper {:decode-key-fn true})))))
 
 (defn store-dictionary! [es-host index-name dictionary]
@@ -64,5 +64,7 @@
 (defn highlighter [dictionary opts]
   (let [es-host (:es-host opts "http://localhost:9200")
         index-name (str "percolator-" (System/currentTimeMillis))]
+    (log/infof "OPTS: %s" opts)
     (store-dictionary! es-host index-name dictionary)
+    (log/infof "Created percolator at '%s' in index '%s'" es-host index-name)
     (fn [text] (percolate es-host index-name text))))

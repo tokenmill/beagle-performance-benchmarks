@@ -1,7 +1,6 @@
 version: '2.2'
 services:
 
-
   bench:
     build:
       context: ../

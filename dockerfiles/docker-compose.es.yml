@@ -11,8 +11,12 @@ services:
     build:
       context: ../
       dockerfile: dockerfiles/Dockerfile.bench
+    volumes:
+      - ../vals/:/usr/src/app/vals/
     command: ["clojure",
               "-m", "bench.phrases",
-              "-texts", "resources/a-10000.csv",
+              "-t", "resources/top-1000.csv",
+              "-k", "text",
               "-implementation", "percolator",
-              "--es-host", "http://elasticsearch:9200"]
+              "--es-host", "http://elasticsearch:9200",
+              "-o", "/usr/src/app/vals/vals.json"]

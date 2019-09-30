@@ -1,28 +1,45 @@
 (ns bench.server
   (:require [reitit.ring :as ring]
-            [org.httpkit.server :as server]))
+            [org.httpkit.server :as server]
+            [beagle.phrases :as phrases]
+            [jsonista.core :as json]))
 
-(defn handler [_]
-  {:status 200, :body "okssss"})
+(def highlighters (atom {}))
 
 (defn wrap [handler id]
   (fn [request]
-    (clojure.pprint/pprint (:path-params request))
     (update (handler request) :wrap (fnil conj '()) id)))
 
 (defn index-creation-handler [request]
-  (clojure.pprint/pprint (:body request))
-  {:status 200, :body "put handler"})
+  (let [old-highlighter (get @highlighters (-> request :path-params :index-name))
+        body (json/read-value (-> request :body) (json/object-mapper {:decode-key-fn true}))
+        highlighter-fn (phrases/highlighter (:dictionary body))]
+    (swap! highlighters assoc (-> request :path-params :index-name) highlighter-fn)
+    {:status 200, :body (if old-highlighter
+                          "Updated"
+                          "Created")}))
+
+(defn percolation-handler [request]
+  (let [highlighter-fn (get @highlighters (-> request :path-params :index-name))]
+    (if highlighter-fn
+      (let [body (json/read-value (-> request :body) (json/object-mapper {:decode-key-fn true}))]
+        {:status 200
+         :body   (json/write-value-as-string {:highlights (highlighter-fn
+                                                            (-> body :query :percolate :document :text))})})
+      {:status 404})))
 
 (def app
   (ring/ring-handler
     (ring/router
       [["/:index-name" {:middleware [[wrap :api]]
-                        :get        handler
                         :put        index-creation-handler
                         :parameters {:query {:index-name String}}
-                        :name       ::ping}]])))
+                        :name       ::percolator-setup}]
+       ["/:index-name/_search" {:middleware [[wrap :api]]
+                                :post       percolation-handler
+                                :parameters {:query {:index-name String}}
+                                :name       ::percolate}]])))
 
 (defn -main [& args]
-  (server/run-server #'app {:port 3000})
+  (server/run-server #'app {:port 9200})
   (println "server running in port 3000"))

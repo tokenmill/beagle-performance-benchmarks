@@ -41,5 +41,5 @@
                                 :name       ::percolate}]])))
 
 (defn -main [& args]
-  (server/run-server #'app {:port 9200})
+  (server/run-server app {:port 9200})
   (println "Fake percolator server running in port 9200"))

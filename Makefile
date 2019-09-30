@@ -14,3 +14,10 @@ run-es-bench:
 	docker-compose -f dockerfiles/docker-compose.es.yml up \
 	--abort-on-container-exit --exit-code-from bench
 	clojure -m bench.view vals/vals.json
+
+run-fake-percolator-bench:
+	mkdir vals || true
+	docker-compose -f dockerfiles/docker-compose.fake-percolator.yml build
+	docker-compose -f dockerfiles/docker-compose.fake-percolator.yml up \
+	--abort-on-container-exit --exit-code-from bench
+	clojure -m bench.view vals/vals.json

@@ -42,4 +42,4 @@
 
 (defn -main [& args]
   (server/run-server #'app {:port 9200})
-  (println "server running in port 3000"))
+  (println "Fake percolator server running in port 9200"))

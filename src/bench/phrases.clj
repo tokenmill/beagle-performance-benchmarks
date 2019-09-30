@@ -9,6 +9,7 @@
             [beagle.readers :as readers]
             [beagle.phrases :as phrases]
             [bench.percolator :as percolator]
+            [bench.fake-percolator :as fake-percolator]
             [bench.cli-options :as cli-options]))
 
 (defn read-news-articles [source]
@@ -89,7 +90,8 @@
 
 (defn get-highlighter [kw]
   (kw {:beagle     phrases/highlighter
-       :percolator percolator/highlighter}
+       :percolator percolator/highlighter
+       :fake-percolator fake-percolator/highlighter}
       beagle.phrases/highlighter))
 
 (defn bench [{:keys [implementation output parallel slop case-sensitive stem ascii-fold stemmer] :as opts}]

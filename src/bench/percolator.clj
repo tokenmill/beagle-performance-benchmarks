@@ -41,9 +41,8 @@
                                :document {:text text}}}
                   :highlight {:fields {:text {}}}})}
      (fn [{:keys [status body error] :as resp}]
-       (log/errorf "Str %s : %s" body status)
        (when (or (not= 200 status) error)
-         (throw (RuntimeException. (format "Error: %s" error))))
+         (throw (RuntimeException. (format "Status %s Error: %s" status error))))
        (json/read-value body (json/object-mapper {:decode-key-fn true})))))
 
 (defn store-dictionary! [es-host index-name dictionary]

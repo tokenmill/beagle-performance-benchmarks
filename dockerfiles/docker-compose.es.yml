@@ -15,7 +15,7 @@ services:
       - ../vals/:/usr/src/app/vals/
     command: ["clojure",
               "-m", "bench.phrases",
-              "-t", "resources/b.csv",
+              "-t", "resources/a-10000.csv",
               "-k", "content",
               "--implementation", "percolator",
               "--es-host", "http://elasticsearch:9200",

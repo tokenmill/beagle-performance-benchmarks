@@ -41,8 +41,12 @@
        ["/:index-name/_search" {:middleware [[wrap :api]]
                                 :post       percolation-handler
                                 :parameters {:query {:index-name String}}
-                                :name       ::percolate}]])))
+                                :name       ::percolate}]])
+    (ring/create-default-handler
+      {:not-found (constantly {:status 404, :body "kosh"})
+       :method-not-allowed (constantly {:status 405, :body "kosh"})
+       :not-acceptable (constantly {:status 406, :body "kosh"})})))
 
 (defn -main [& args]
-  (server/run-server app {:port 9200})
+  (server/run-server #'app {:port 9200 :max-body Integer/MAX_VALUE})
   (println "Fake percolator server running in port 9200"))

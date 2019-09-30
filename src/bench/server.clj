@@ -2,7 +2,8 @@
   (:require [reitit.ring :as ring]
             [org.httpkit.server :as server]
             [beagle.phrases :as phrases]
-            [jsonista.core :as json]))
+            [jsonista.core :as json]
+            [taoensso.timbre :as log]))
 
 (def highlighters (atom {}))
 
@@ -11,10 +12,12 @@
     (update (handler request) :wrap (fnil conj '()) id)))
 
 (defn index-creation-handler [request]
-  (let [old-highlighter (get @highlighters (-> request :path-params :index-name))
+  (let [index-name (-> request :path-params :index-name)
+        old-highlighter (get @highlighters index-name)
         body (json/read-value (-> request :body) (json/object-mapper {:decode-key-fn true}))
         highlighter-fn (phrases/highlighter (:dictionary body))]
-    (swap! highlighters assoc (-> request :path-params :index-name) highlighter-fn)
+    (swap! highlighters assoc index-name highlighter-fn)
+    (log/infof "Created percolator: %s" index-name)
     {:status 200, :body (if old-highlighter
                           "Updated"
                           "Created")}))

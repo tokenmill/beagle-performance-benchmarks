@@ -6,7 +6,17 @@
 
 Performance benchmarks for Beagle library and a comparison with other stored query solutions.
 
-## Benchmarking
+## Available Benchmarks for Phrase Matching
+
+3 are available:
+- `make run-beagle-bench`: in docker-compose runs Beagle benchmark
+- `make run-es-bench`: in docker compose runs Elasticsearch Percolator benchmark
+- `run-fake-percolator-bench`: in docker-compose runs Beagle benchmark when beagle is deployed as an HTTP server
+that simulates Elasticsearch Percolator API. 
+
+## Phrases Benchmarking
+
+Given a list of phrases highlight those phrases in the given list of documents.
 
 ```bash
 clj -m bench.phrases

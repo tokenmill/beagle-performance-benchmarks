@@ -123,10 +123,11 @@
       (System/exit 1))
     (if (:help options)
       (do
+        (log/info "Available CLI options:")
         (println summary)
         (System/exit 0))
       (do
-        (when-not (get-in options [:options :texts])
+        (when-not (:texts-file options)
           (log/error "Please specify texts file.")
           (println summary)
           (System/exit 1))

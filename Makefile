@@ -1,7 +1,7 @@
 run-dev-env:
 	docker-compose -f dockerfiles/docker-compose.yml up
 
-run-bench:
+run-beagle-bench:
 	mkdir vals || true
 	docker-compose -f dockerfiles/docker-compose.beagle.yml build
 	docker-compose -f dockerfiles/docker-compose.beagle.yml up \

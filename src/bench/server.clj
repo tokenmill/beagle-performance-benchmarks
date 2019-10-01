@@ -1,15 +1,11 @@
 (ns bench.server
-  (:require [reitit.ring :as ring]
-            [org.httpkit.server :as server]
-            [beagle.phrases :as phrases]
+  (:require [clojure.tools.logging :as log]
             [jsonista.core :as json]
-            [taoensso.timbre :as log]))
+            [reitit.ring :as ring]
+            [org.httpkit.server :as server]
+            [beagle.phrases :as phrases]))
 
 (def highlighters (atom {}))
-
-(defn wrap [handler id]
-  (fn [request]
-    (update (handler request) :wrap (fnil conj '()) id)))
 
 (defn index-creation-handler [request]
   (let [index-name (-> request :path-params :index-name)
@@ -18,9 +14,7 @@
         highlighter-fn (phrases/highlighter (:dictionary body))]
     (swap! highlighters assoc index-name highlighter-fn)
     (log/infof "Created percolator: %s" index-name)
-    {:status 200, :body (if old-highlighter
-                          "Updated"
-                          "Created")}))
+    {:status 200, :body (if old-highlighter "Updated" "Created")}))
 
 (defn percolation-handler [request]
   (let [highlighter-fn (get @highlighters (-> request :path-params :index-name))]
@@ -34,12 +28,10 @@
 (def app
   (ring/ring-handler
     (ring/router
-      [["/:index-name" {:middleware [[wrap :api]]
-                        :put        index-creation-handler
+      [["/:index-name" {:put        index-creation-handler
                         :parameters {:query {:index-name String}}
                         :name       ::percolator-setup}]
-       ["/:index-name/_search" {:middleware [[wrap :api]]
-                                :post       percolation-handler
+       ["/:index-name/_search" {:post       percolation-handler
                                 :parameters {:query {:index-name String}}
                                 :name       ::percolate}]])
     (ring/create-default-handler

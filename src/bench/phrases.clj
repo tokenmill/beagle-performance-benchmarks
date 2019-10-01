@@ -123,13 +123,13 @@
       (System/exit 1))
     (if (:help options)
       (do
+        (println summary)
+        (System/exit 0))
+      (do
         (when-not (get-in options [:options :texts])
           (log/error "Please specify texts file.")
           (println summary)
           (System/exit 1))
-        (println summary)
-        (System/exit 0))
-      (do
         (bench options)
         (shutdown-agents)
         (System/exit 0)))))

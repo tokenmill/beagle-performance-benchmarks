@@ -62,11 +62,40 @@ clojure -m bench.view BENCHMARK_OUTPUT_FILE
 
 We run the benchmark on a news dataset downloaded from [Kaggle](https://www.kaggle.com/snapcrack/all-the-news/downloads/all-the-news.zip/4).
 
-## Performance
+## Phrase Percolation Benchmarks
+
+### Sequential Beagle
+
+Beagle highlights phrases in a text document in as low as 1.3 ms with dictionary size of 5000 phrases.
 
 ![alt text](resources/average-per-doc.png)
 
+Max time spent (see red line) in highlighting text grows approximately linearly with the size of dictionary. 
+
+Minimum time spent in in highlighting text is as low as 0.4 ms irregardless of the dictionary size.
+
 ![alt text](resources/min-max-per-doc.png)
+
+### Beagle Concurrent
+
+Beagle with concurrency=16 
+
+![alt text](resources/beagle-c16.png)
+
+### Elasticsearch Percolator
+
+Elasticsearch Percolator with concurrency=16 
+
+![alt text](resources/percolator-c16.png)
+
+### Beagle Faking the Elasticsearch Percolator 
+
+Beagle implementing the API of Elasticsearch Percolator with concurrency=16
+
+![alt text](resources/beagle-percolator-c16.png)
+
+During the benchmarks Elasticsearch Percolator was ~2x slower than Beagle deployed in an HTTP server 
+with the nearly identical API. 
 
 ## License
 

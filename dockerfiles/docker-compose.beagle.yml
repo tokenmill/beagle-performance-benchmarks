@@ -1,0 +1,14 @@
+version: '2.2'
+services:
+
+  bench:
+    build:
+      context: ../
+      dockerfile: dockerfiles/Dockerfile.bench
+    volumes:
+      - ../vals/:/usr/src/app/vals/
+    command: ["clojure", "-m", "bench.phrases",
+              "-t", "resources/a-10000.csv",
+              "-k", "content",
+              "-c", "16",
+              "-o", "/usr/src/app/vals/vals.json"]

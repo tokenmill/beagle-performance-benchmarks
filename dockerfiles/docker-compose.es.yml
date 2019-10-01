@@ -1,0 +1,22 @@
+version: '2.2'
+services:
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.3.2
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+
+  bench:
+    build:
+      context: ../
+      dockerfile: dockerfiles/Dockerfile.bench
+    volumes:
+      - ../vals/:/usr/src/app/vals/
+    command: ["clojure",
+              "-m", "bench.phrases",
+              "-t", "resources/a-10000.csv",
+              "-k", "content",
+              "--implementation", "percolator",
+              "--es-host", "http://elasticsearch:9200",
+              "-o", "/usr/src/app/vals/vals.json"]

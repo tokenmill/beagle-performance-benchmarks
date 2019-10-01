@@ -1,0 +1,12 @@
+FROM clojure:openjdk-8-tools-deps-alpine
+
+RUN mkdir -p /usr/src/app
+WORKDIR /usr/src/app
+
+COPY deps.edn deps.edn
+
+RUN clojure -R:dev
+
+COPY . /usr/src/app
+
+CMD ["clojure"]

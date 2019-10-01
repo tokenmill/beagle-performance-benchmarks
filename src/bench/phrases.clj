@@ -4,10 +4,13 @@
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
             [clojure.data.csv :as csv]
-            [clojure.core.async :refer [chan pipeline-blocking to-chan <!! close!]]
+            [clojure.core.async :refer [chan pipeline to-chan <!! close!]]
             [jsonista.core :as json]
             [beagle.readers :as readers]
-            [beagle.phrases :as phrases]))
+            [beagle.phrases :as phrases]
+            [bench.percolator :as percolator]
+            [bench.fake-percolator :as fake-percolator]
+            [bench.cli-options :as cli-options]))
 
 (defn read-news-articles [source]
   (with-open [reader (io/reader source)]
@@ -32,15 +35,17 @@
          :duration    -1}))))
 
 (defn bench-concurrent*
-  ([dictionary articles key]
-   (bench-concurrent* dictionary articles key (* 2 (.availableProcessors (Runtime/getRuntime)))))
-  ([dictionary articles key parallelism]
-   (let [annotator-fn (phrases/annotator dictionary)
-         out (chan (or parallelism 16))
+  ([highlighter-fn dictionary articles key]
+   (bench-concurrent* highlighter-fn dictionary articles key
+                      {:concurrency (* 2 (.availableProcessors (Runtime/getRuntime)))}))
+  ([highlighter-fn dictionary articles key opts]
+   (let [concurrency (:concurrency opts)
+         annotator-fn (highlighter-fn dictionary opts)
+         out (chan (or concurrency 16))
          xf (map #(annotate annotator-fn % key))
          start (System/nanoTime)]
-     (pipeline-blocking
-       (or parallelism 16)
+     (pipeline
+       (or concurrency 16)
        out
        xf
        (to-chan articles))
@@ -49,25 +54,27 @@
        (log/infof "Annotated in %s ns" (- (System/nanoTime) start))
        output))))
 
-(defn bench-one-thread [dictionary articles key]
-  (let [annotator-fn (phrases/annotator dictionary)
+(defn bench-one-thread [highlighter-fn dictionary articles key opts]
+  (let [annotator-fn (highlighter-fn dictionary opts)
         start (System/nanoTime)
         rez (doall (map #(annotate annotator-fn % key) articles))
         _ (log/infof "Annotated in %s ns" (- (System/nanoTime) start))]
     rez))
 
-(defn bench* [{:keys [warm-up bench-fn dictionary-file dictionary-step dictionary-entry-opts articles-file key]}]
+(defn bench* [{:keys [warm-up bench-fn highlighter-fn texts-file key
+                      dictionary-file dictionary-step dictionary-entry-opts]
+               :as   opts}]
   (let [dictionary (map #(merge % dictionary-entry-opts) (readers/read-csv dictionary-file))
-        articles (read-news-articles articles-file)]
+        articles (read-news-articles texts-file)]
     (let [step (min (or dictionary-step 5000) (count dictionary))]
       (when warm-up
         (log/infof "Doing a warm-up run.")
-        (bench-fn dictionary articles key))
+        (bench-fn highlighter-fn dictionary articles key opts))
       (loop [cnt step
              result []]
         (if (<= cnt (count dictionary))
           (let [start (System/nanoTime)
-                rez (bench-fn (take cnt dictionary) articles key)
+                rez (bench-fn highlighter-fn (take cnt dictionary) articles key opts)
                 succeeded (filter pos-int? (map :duration rez))
                 failed (filter neg-int? (map :duration rez))]
             (recur (+ cnt step)
@@ -81,81 +88,49 @@
                                  :average         (float (/ (reduce + succeeded) (count succeeded) 1000000))})))
           result)))))
 
-(defn bench [{:keys [warm-up dictionary texts output step parallel key
-                     slop case-sensitive stem ascii-fold stemmer] :as opts}]
+(defn get-highlighter [kw]
+  (kw {:beagle     phrases/highlighter
+       :percolator percolator/highlighter
+       :fake-percolator fake-percolator/highlighter}
+      beagle.phrases/highlighter))
+
+(defn bench [{:keys [implementation output parallel slop case-sensitive stem ascii-fold stemmer] :as opts}]
   (log/infof "Started benchmark with opts: '%s'" opts)
   (let [bench-fn (if parallel bench-concurrent* bench-one-thread)
+        highlighter-fn (get-highlighter implementation)
         benchmark {:meta {:opts    opts
                           :system  (System/getProperties)
                           :runtime {:total-memory (.totalMemory (Runtime/getRuntime))
                                     :cpu          (.availableProcessors (Runtime/getRuntime))}}
-                   :data (bench.phrases/bench* {:warm-up               warm-up
-                                                :bench-fn              bench-fn
-                                                :dictionary-step       step
-                                                :dictionary-entry-opts {:slop            slop
-                                                                        :case-sensitive? case-sensitive
-                                                                        :ascii-fold?     ascii-fold
-                                                                        :stem?           stem
-                                                                        :stemmer         stemmer}
-                                                :dictionary-file       dictionary
-                                                :articles-file         texts
-                                                :key                   key})}]
+                   :data (bench.phrases/bench* (assoc opts
+                                                 :tokenizer             :whitespace
+                                                 :highlighter-fn        highlighter-fn
+                                                 :bench-fn              bench-fn
+                                                 :dictionary-entry-opts {:slop            slop
+                                                                         :case-sensitive? case-sensitive
+                                                                         :ascii-fold?     ascii-fold
+                                                                         :stem?           stem
+                                                                         :stemmer         stemmer}))}]
+    (log/infof "Results stored in: %s" output)
     (spit output (json/write-value-as-string benchmark))))
-
-(def cli-options
-  [["-d" "--dictionary DICTIONARY" "Path to the dictionary file"
-    :default "resources/top-10000.csv"]
-   ["-o" "--output OUTPUT" "Path to the output file"
-    :default (str "vals-" (System/currentTimeMillis) ".json")]
-   [:short-opt "-t"
-    :long-opt "--texts"
-    :desc "Path to the CSV file with texts"
-    :required "TEXTS_CSV_FILE"]
-   ["-s" "--step STEP" "Step size for increase in dictionary"
-    :parse-fn #(Integer/parseInt %)
-    :default 5000]
-   ["-p" "--parallel PARALLEL" "Should the benchmark be run in parallel"
-    :parse-fn #(Boolean/parseBoolean %)
-    :default true]
-   ["-k" "--key KEY" "CSV header key to select"
-    :parse-fn #(keyword %)
-    :default :content]
-   ["-w" "--warm-up WARM-UP" "Should the warm-up be run"
-    :parse-fn #(Boolean/parseBoolean %)
-    :default true]
-   [nil "--slop SLOP" "Phrase slop for dictionary entries"
-    :parse-fn #(Integer/parseInt %)
-    :default 0]
-   [nil "--case-sensitive CASE_SENSITIVE" "Should matching be case sensitive"
-    :parse-fn #(Boolean/parseBoolean %)
-    :default true]
-   [nil "--ascii-fold ASCII_FOLD" "Should matching be ascii folded"
-    :parse-fn #(Boolean/parseBoolean %)
-    :default false]
-   [nil "--stem STEM" "Should matching be stemmed"
-    :parse-fn #(Boolean/parseBoolean %)
-    :default false]
-   [nil "--stemmer STEMMER" "which stemmer should be used"
-    :parse-fn #(keyword %)
-    :default :english]
-   ["-h" "--help"]])
 
 (defn -main [& args]
   (let [{:keys [options summary errors]}
-        (cli/parse-opts args cli-options :strict true)]
+        (cli/parse-opts args cli-options/options :strict true)]
     (when (seq errors)
       (println errors)
       (println summary)
-      (System/exit 0))
+      (System/exit 1))
     (if (:help options)
       (do
-        (when-not (get-in options [:options :texts])
-          (log/error "Please specify texts file.")
-          (println summary)
-          (System/exit 0))
+        (log/info "Available CLI options:")
         (println summary)
         (System/exit 0))
       (do
+        (when-not (:texts-file options)
+          (log/error "Please specify texts file.")
+          (println summary)
+          (System/exit 1))
         (bench options)
         (shutdown-agents)
         (System/exit 0)))))
